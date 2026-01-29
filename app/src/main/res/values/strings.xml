@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">Remote Assist</string>
+    
+    <!-- Accessibility Service -->
+    <string name="accessibility_service_label">Remote Assist Control Service</string>
+    <string name="accessibility_service_description">This service allows Remote Assist to perform gestures (tap, swipe, scroll, type) on behalf of the remote controller during an active support session.\n\nThis permission is ONLY used when you explicitly start a remote session. You can disable it at any time in Settings.\n\nWe respect your privacy - no actions are performed without your consent.</string>
+    
+    <!-- Onboarding -->
+    <string name="onboarding_welcome_title">Welcome to Remote Assist</string>
+    <string name="onboarding_welcome_desc">A secure way to provide remote support and assistance.</string>
+    
+    <!-- Session -->
+    <string name="session_active_title">Remote Control Active</string>
+    <string name="session_active_desc">This device is being remotely controlled</string>
+    <string name="emergency_stop">EMERGENCY STOP</string>
+    
+    <!-- Pairing -->
+    <string name="pairing_code_hint">Enter 6-character code</string>
+    <string name="connect">Connect</string>
+    <string name="generate_new_code">Generate New Code</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_session">Remote Session</string>
+    <string name="notification_channel_connection">Connection Status</string>
+    
+    <!-- Privacy -->
+    <string name="privacy_policy_url">https://your-domain.com/privacy</string>
+    <string name="terms_of_service_url">https://your-domain.com/terms</string>
+</resources>

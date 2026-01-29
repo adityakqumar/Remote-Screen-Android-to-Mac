@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="notification_color">#2196F3</color>
+    <color name="primary_blue">#2196F3</color>
+    <color name="secondary_teal">#00BCD4</color>
+    <color name="success_green">#4CAF50</color>
+    <color name="warning_orange">#FF9800</color>
+    <color name="error_red">#F44336</color>
+    <color name="emergency_red">#D50000</color>
+</resources>

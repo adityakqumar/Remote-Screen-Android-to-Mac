@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Accessibility Service Configuration for Remote Screen.
+    
+    This configuration enables:
+    - Gesture dispatch (canPerformGestures)
+    - Global actions (back, home, recents)
+    - Text input into focused fields
+    
+    IMPORTANT: This service requires explicit user consent and
+    must be manually enabled in Settings > Accessibility.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagRequestFilterKeyEvents"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:settingsActivity="com.ad.remotescreen.ui.SettingsActivity"
+    android:notificationTimeout="100" />

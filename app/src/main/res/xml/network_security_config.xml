@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Configuration
+    Allows cleartext traffic for local development but requires TLS for production.
+-->
+<network-security-config>
+    <!-- Base config requires TLS -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- Allow cleartext for local development only -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain> <!-- Android emulator -->
+        <domain includeSubdomains="true">192.168.0.0/16</domain> <!-- Local network -->
+    </domain-config>
+</network-security-config>
