@@ -3,11 +3,18 @@
  * 
  * Connects to the signaling server and establishes WebRTC connection
  * to view and control the Android device.
+ * 
+ * Flow:
+ * 1. Web connects to signaling server with pairing code
+ * 2. Android (Target) sends WebRTC offer
+ * 3. Web creates answer and sends it back
+ * 4. ICE candidates are exchanged
+ * 5. Video stream starts flowing
  */
 
 class RemoteController {
     constructor() {
-        // WebRTC configuration
+        // WebRTC configuration with STUN servers
         this.rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -185,7 +192,7 @@ class RemoteController {
             
             this.ws.onopen = () => {
                 console.log('WebSocket connected');
-                this.showStatus('Connected! Waiting for peer...', 'success');
+                this.showStatus('Connected! Waiting for video offer...', 'success');
                 
                 // Send join message
                 this.ws.send(JSON.stringify({
@@ -193,6 +200,9 @@ class RemoteController {
                     room: code,
                     role: 'controller'
                 }));
+                
+                // Initialize peer connection right away so we're ready to receive offers
+                this.createPeerConnection();
             };
             
             this.ws.onmessage = (event) => {
@@ -222,7 +232,7 @@ class RemoteController {
     }
     
     async handleSignalingMessage(message) {
-        console.log('Received:', message.type);
+        console.log('Received:', message.type, message);
         
         switch (message.type) {
             case 'joined':
@@ -230,41 +240,48 @@ class RemoteController {
                 break;
                 
             case 'peer-joined':
-                console.log('Peer joined, creating offer...');
-                this.showStatus('Peer connected! Establishing video...', 'success');
-                await this.createPeerConnection();
-                await this.createOffer();
+                // Peer (Android Target) joined - it will send us an offer
+                console.log('Peer joined, waiting for offer...');
+                this.showStatus('Peer connected! Waiting for video stream...', 'success');
                 break;
                 
             case 'offer':
-                console.log('Received offer');
-                await this.createPeerConnection();
-                await this.pc.setRemoteDescription(new RTCSessionDescription({
-                    type: 'offer',
-                    sdp: message.sdp
-                }));
-                await this.createAnswer();
+                // Received offer from Android Target - create and send answer
+                console.log('Received offer from Target, creating answer...');
+                this.showStatus('Received video offer, connecting...', 'success');
+                
+                if (!this.pc) {
+                    this.createPeerConnection();
+                }
+                
+                try {
+                    await this.pc.setRemoteDescription(new RTCSessionDescription({
+                        type: 'offer',
+                        sdp: message.sdp
+                    }));
+                    console.log('Set remote description (offer)');
+                    await this.createAnswer();
+                } catch (error) {
+                    console.error('Error handling offer:', error);
+                }
                 break;
                 
             case 'answer':
-                console.log('Received answer');
-                if (this.pc) {
-                    await this.pc.setRemoteDescription(new RTCSessionDescription({
-                        type: 'answer',
-                        sdp: message.sdp
-                    }));
-                }
+                // This shouldn't happen - we don't send offers
+                console.log('Received unexpected answer');
                 break;
                 
             case 'ice-candidate':
                 console.log('Received ICE candidate');
                 if (this.pc && message.candidate) {
                     try {
-                        await this.pc.addIceCandidate(new RTCIceCandidate({
+                        const candidate = new RTCIceCandidate({
                             candidate: message.candidate.candidate || message.candidate,
-                            sdpMid: message.sdpMid || message.candidate.sdpMid || '0',
-                            sdpMLineIndex: message.sdpMLineIndex ?? message.candidate.sdpMLineIndex ?? 0
-                        }));
+                            sdpMid: message.sdpMid || message.candidate?.sdpMid || '0',
+                            sdpMLineIndex: message.sdpMLineIndex ?? message.candidate?.sdpMLineIndex ?? 0
+                        });
+                        await this.pc.addIceCandidate(candidate);
+                        console.log('Added ICE candidate');
                     } catch (e) {
                         console.error('Error adding ICE candidate:', e);
                     }
@@ -278,17 +295,20 @@ class RemoteController {
         }
     }
     
-    async createPeerConnection() {
+    createPeerConnection() {
         if (this.pc) {
-            this.pc.close();
+            console.log('PeerConnection already exists');
+            return;
         }
         
+        console.log('Creating PeerConnection...');
         this.pc = new RTCPeerConnection(this.rtcConfig);
         
-        // Handle incoming tracks
+        // Handle incoming tracks - THIS IS WHERE VIDEO COMES IN
         this.pc.ontrack = (event) => {
-            console.log('Received track:', event.track.kind);
+            console.log('🎥 Received track:', event.track.kind);
             if (event.track.kind === 'video') {
+                console.log('Setting video stream to video element');
                 this.remoteVideo.srcObject = event.streams[0];
                 this.videoOverlay.classList.add('hidden');
                 this.showControllerScreen();
@@ -298,6 +318,7 @@ class RemoteController {
         // Handle ICE candidates
         this.pc.onicecandidate = (event) => {
             if (event.candidate) {
+                console.log('Sending ICE candidate');
                 this.ws.send(JSON.stringify({
                     type: 'ice-candidate',
                     candidate: event.candidate.candidate,
@@ -311,39 +332,41 @@ class RemoteController {
         this.pc.onconnectionstatechange = () => {
             console.log('Connection state:', this.pc.connectionState);
             if (this.pc.connectionState === 'connected') {
+                console.log('✅ WebRTC Connected!');
                 this.isConnected = true;
-            } else if (this.pc.connectionState === 'failed' || this.pc.connectionState === 'disconnected') {
+            } else if (this.pc.connectionState === 'failed') {
+                console.error('❌ WebRTC Connection failed');
+                this.showStatus('Connection failed', 'error');
+            } else if (this.pc.connectionState === 'disconnected') {
                 this.showStatus('Connection lost', 'error');
             }
         };
         
-        // Add transceiver for receiving video
-        this.pc.addTransceiver('video', { direction: 'recvonly' });
-    }
-    
-    async createOffer() {
-        try {
-            const offer = await this.pc.createOffer();
-            await this.pc.setLocalDescription(offer);
-            
-            this.ws.send(JSON.stringify({
-                type: 'offer',
-                sdp: offer.sdp
-            }));
-        } catch (error) {
-            console.error('Error creating offer:', error);
-        }
+        this.pc.oniceconnectionstatechange = () => {
+            console.log('ICE connection state:', this.pc.iceConnectionState);
+        };
+        
+        this.pc.onsignalingstatechange = () => {
+            console.log('Signaling state:', this.pc.signalingState);
+        };
+        
+        // We're RECEIVING video so we don't add any tracks
+        // The offer from Android will include video track info
+        console.log('PeerConnection created, ready to receive offer');
     }
     
     async createAnswer() {
         try {
+            console.log('Creating answer...');
             const answer = await this.pc.createAnswer();
             await this.pc.setLocalDescription(answer);
+            console.log('Set local description (answer)');
             
             this.ws.send(JSON.stringify({
                 type: 'answer',
                 sdp: answer.sdp
             }));
+            console.log('Sent answer to Target');
         } catch (error) {
             console.error('Error creating answer:', error);
         }
