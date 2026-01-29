@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Screen Controller</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Connection Screen -->
+        <div id="connection-screen" class="screen active">
+            <div class="header">
+                <h1>🖥️ Remote Screen Controller</h1>
+                <p>Control your Android phone from this browser</p>
+            </div>
+            
+            <div class="connect-card">
+                <h2>Enter Pairing Code</h2>
+                <p>Get the code from your Android phone's "Share Access" screen</p>
+                
+                <div class="code-input-container">
+                    <input type="text" id="pairing-code" placeholder="ABC123" maxlength="6" autocomplete="off">
+                </div>
+                
+                <button id="connect-btn" class="primary-btn">
+                    <span class="btn-text">Connect</span>
+                    <span class="btn-loader" style="display: none;">Connecting...</span>
+                </button>
+                
+                <div id="connection-status" class="status"></div>
+            </div>
+            
+            <div class="info-section">
+                <h3>How it works:</h3>
+                <ol>
+                    <li>On your Android phone, open Remote Screen app</li>
+                    <li>Select "Target" to share your screen</li>
+                    <li>Enter the 6-digit code shown on your phone above</li>
+                    <li>Click Connect to start controlling</li>
+                </ol>
+            </div>
+        </div>
+        
+        <!-- Controller Screen -->
+        <div id="controller-screen" class="screen">
+            <div class="controller-header">
+                <div class="header-left">
+                    <span class="status-dot connected"></span>
+                    <span id="session-code">Connected: ---</span>
+                </div>
+                <div class="header-right">
+                    <button id="fullscreen-btn" class="icon-btn" title="Fullscreen">⛶</button>
+                    <button id="disconnect-btn" class="icon-btn danger" title="Disconnect">✕</button>
+                </div>
+            </div>
+            
+            <div class="video-container">
+                <video id="remote-video" autoplay playsinline></video>
+                <div id="video-overlay" class="video-overlay">
+                    <div class="waiting-message">
+                        <div class="spinner"></div>
+                        <p>Waiting for screen stream...</p>
+                        <p class="hint">Make sure the phone has granted screen capture permission</p>
+                    </div>
+                </div>
+                <canvas id="gesture-canvas"></canvas>
+            </div>
+            
+            <div class="controls-bar">
+                <button id="btn-back" class="control-btn" title="Back">◀ Back</button>
+                <button id="btn-home" class="control-btn" title="Home">⌂ Home</button>
+                <button id="btn-recents" class="control-btn" title="Recent Apps">☐ Recents</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="controller.js"></script>
+</body>
+</html>

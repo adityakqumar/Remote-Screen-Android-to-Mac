@@ -35,10 +35,9 @@ class SignalingClient @Inject constructor(
     companion object {
         private const val TAG = "SignalingClient"
         
-        // Cloud server URL - update with your deployed server
-        // Deploy backend to Render.com or Railway.app for free hosting
-        // For local testing: "ws://YOUR_IP:8080/ws"
-        private const val DEFAULT_SERVER_URL = "ws://172.22.2.20:8080/ws"
+        // Cloud server URL - Deployed on Render.com
+        // Works globally across any network/country
+        private const val DEFAULT_SERVER_URL = "wss://remotescreen-backend.onrender.com/ws"
     }
     
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())

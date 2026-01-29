@@ -2,20 +2,44 @@
  * Remote Assist Backend Server
  * 
  * Provides:
- * 1. Signaling Server - For WebRTC SDP/ICE exchange
- * 2. Control Server - For gesture command relay
- * 
- * Both run on a single port for cloud deployment compatibility.
+ * 1. Static file serving for web controller
+ * 2. WebSocket signaling for WebRTC
+ * 3. Gesture command relay
  */
 
 const WebSocket = require('ws');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
-// Single port for cloud deployment (Render, Railway, etc.)
+// Single port for cloud deployment
 const PORT = process.env.PORT || 8080;
+
+// MIME types for static files
+const MIME_TYPES = {
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon'
+};
 
 // Create HTTP server
 const server = http.createServer((req, res) => {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+    }
+    
     // Health check endpoint
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -23,27 +47,38 @@ const server = http.createServer((req, res) => {
         return;
     }
     
-    // Info endpoint
-    if (req.url === '/') {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`
-            <html>
-                <head><title>Remote Assist Server</title></head>
-                <body style="font-family: Arial; padding: 20px;">
-                    <h1>🔗 Remote Assist Signaling Server</h1>
-                    <p>WebSocket endpoint: <code>wss://${req.headers.host}/ws</code></p>
-                    <p>Status: ✅ Running</p>
-                </body>
-            </html>
-        `);
-        return;
-    }
+    // Serve static files from public directory
+    let filePath = req.url === '/' ? '/index.html' : req.url;
+    filePath = path.join(__dirname, 'public', filePath);
     
-    res.writeHead(404);
-    res.end('Not Found');
+    const ext = path.extname(filePath);
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    
+    fs.readFile(filePath, (err, data) => {
+        if (err) {
+            if (err.code === 'ENOENT') {
+                // File not found - serve index.html for SPA routing
+                fs.readFile(path.join(__dirname, 'public', 'index.html'), (err2, data2) => {
+                    if (err2) {
+                        res.writeHead(404);
+                        res.end('Not Found');
+                    } else {
+                        res.writeHead(200, { 'Content-Type': 'text/html' });
+                        res.end(data2);
+                    }
+                });
+            } else {
+                res.writeHead(500);
+                res.end('Server Error');
+            }
+        } else {
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(data);
+        }
+    });
 });
 
-// Create WebSocket server attached to HTTP server
+// Create WebSocket server
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 // Rooms: Map<roomId, Set<WebSocket>>
@@ -56,7 +91,7 @@ console.log(`🚀 Server starting on port ${PORT}`);
 wss.on('connection', (ws, req) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const codeFromUrl = url.searchParams.get('code');
-    const clientType = url.searchParams.get('type') || 'signaling'; // 'signaling' or 'control'
+    const clientType = url.searchParams.get('type') || 'signaling';
     
     console.log(`📱 New ${clientType} connection${codeFromUrl ? ` with code: ${codeFromUrl}` : ''}`);
     
@@ -86,10 +121,9 @@ wss.on('connection', (ws, req) => {
                     }
                 });
                 
-                // Clean up empty rooms
                 if (roomClients.size === 0) {
                     rooms.delete(room);
-                    console.log(`🗑️ Room ${room} deleted (empty)`);
+                    console.log(`🗑️ Room ${room} deleted`);
                 }
             }
             
@@ -122,11 +156,10 @@ function joinRoom(ws, roomId, clientType) {
     // Send acknowledgment
     ws.send(JSON.stringify({ type: 'joined', room: roomId }));
     
-    // Notify if there's already a peer
+    // Notify all peers if there are others
     if (roomClients.size > 1) {
         ws.send(JSON.stringify({ type: 'peer-joined' }));
         
-        // Notify existing peers
         roomClients.forEach(client => {
             if (client !== ws && client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({ type: 'peer-joined' }));
@@ -143,8 +176,6 @@ function handleMessage(ws, message, codeFromUrl, clientType) {
         case 'join':
             if (roomId) {
                 joinRoom(ws, roomId, clientType);
-            } else {
-                console.error('No room/sessionId provided');
             }
             break;
             
@@ -159,14 +190,13 @@ function handleMessage(ws, message, codeFromUrl, clientType) {
             relayToRoom(ws, { 
                 type: 'ice-candidate', 
                 candidate: message.candidate,
-                sdpMid: message.sdpMid || (message.candidate && message.candidate.sdpMid),
-                sdpMLineIndex: message.sdpMLineIndex || (message.candidate && message.candidate.sdpMLineIndex)
+                sdpMid: message.sdpMid,
+                sdpMLineIndex: message.sdpMLineIndex
             });
             break;
             
         case 'gesture':
-        case 'command':
-            console.log(`🎮 Relaying gesture command`);
+            console.log(`🎮 Relaying gesture: ${message.action}`);
             relayToRoom(ws, message);
             break;
             
@@ -181,16 +211,10 @@ function handleMessage(ws, message, codeFromUrl, clientType) {
 
 function relayToRoom(sender, message) {
     const clientInfo = clients.get(sender);
-    if (!clientInfo) {
-        console.error('Sender not in any room');
-        return;
-    }
+    if (!clientInfo) return;
     
     const roomClients = rooms.get(clientInfo.room);
-    if (!roomClients) {
-        console.error('Room not found');
-        return;
-    }
+    if (!roomClients) return;
     
     let relayCount = 0;
     roomClients.forEach(client => {
@@ -206,15 +230,15 @@ function relayToRoom(sender, message) {
 server.listen(PORT, () => {
     console.log('\n✅ Remote Assist Backend Ready!');
     console.log('================================');
-    console.log(`HTTP:      http://localhost:${PORT}`);
-    console.log(`WebSocket: ws://localhost:${PORT}/ws`);
+    console.log(`Web Controller: http://localhost:${PORT}`);
+    console.log(`WebSocket:      ws://localhost:${PORT}/ws`);
     console.log('================================');
     console.log('\nWaiting for connections...\n');
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-    console.log('\nShutting down server...');
+    console.log('\nShutting down...');
     server.close();
     process.exit(0);
 });
