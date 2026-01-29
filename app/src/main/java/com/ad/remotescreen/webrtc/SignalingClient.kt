@@ -58,6 +58,12 @@ class SignalingClient @Inject constructor(
     private val _iceCandidateChannel = Channel<IceCandidate>(Channel.UNLIMITED)
     val iceCandidateFlow: Flow<IceCandidate> = _iceCandidateChannel.receiveAsFlow()
     
+    private val _peerJoined = MutableStateFlow(false)
+    val peerJoined: StateFlow<Boolean> = _peerJoined.asStateFlow()
+    
+    private val _peerLeft = MutableStateFlow(false)
+    val peerLeft: StateFlow<Boolean> = _peerLeft.asStateFlow()
+    
     enum class ConnectionState {
         DISCONNECTED, CONNECTING, CONNECTED, ERROR
     }
@@ -139,10 +145,13 @@ class SignalingClient @Inject constructor(
                     }
                 }
                 "peer-joined" -> {
-                    Log.i(TAG, "Peer joined the session")
+                    Log.i(TAG, "Peer joined the session!")
+                    _peerJoined.value = true
                 }
                 "peer-left" -> {
                     Log.i(TAG, "Peer left the session")
+                    _peerLeft.value = true
+                    _peerJoined.value = false
                 }
                 else -> {
                     Log.w(TAG, "Unknown message type: ${message.type}")

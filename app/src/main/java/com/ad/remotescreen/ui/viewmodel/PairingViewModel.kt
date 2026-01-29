@@ -74,6 +74,24 @@ class PairingViewModel @Inject constructor(
             }
         }
         
+        // Observe peer joined - this triggers navigation to Target/Controller screen
+        viewModelScope.launch {
+            signalingClient.peerJoined.collectLatest { joined ->
+                if (joined) {
+                    Log.d(TAG, "Peer joined! Marking as connected.")
+                    sessionRepository.onConnected("peer-connected")
+                    _uiState.update { 
+                        it.copy(
+                            isConnected = true, 
+                            isConnecting = false, 
+                            isWaiting = false,
+                            connectionStatus = "Peer connected!"
+                        )
+                    }
+                }
+            }
+        }
+        
         // Observe session state for connection success
         viewModelScope.launch {
             sessionRepository.currentSession.collectLatest { session ->

@@ -189,8 +189,15 @@ class RemoteAssistanceService : Service() {
      */
     private suspend fun initializeConnections(pairingCode: String) {
         try {
-            // Connect to signaling server
-            webRTCClient.connect(pairingCode, currentRole ?: DeviceRole.CONTROLLER)
+            // Connect signaling client first (this is shared)
+            // Note: For target, signaling is already connected from PairingViewModel
+            
+            // Initialize WebRTC based on role
+            if (currentRole == DeviceRole.TARGET) {
+                webRTCClient.initializeAsTarget()
+            } else {
+                webRTCClient.initializeAsController()
+            }
             
             // Connect control channel
             controlClient.connect(pairingCode)

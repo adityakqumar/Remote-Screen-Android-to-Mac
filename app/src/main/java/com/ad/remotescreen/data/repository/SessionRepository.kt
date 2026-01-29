@@ -40,7 +40,7 @@ class SessionRepository @Inject constructor() {
             role = DeviceRole.TARGET
         )
         _currentSession.value = session
-        logActivity(ActivityType.SESSION_STARTED, "Session created, waiting for controller")
+        addActivityLog(ActivityType.SESSION_STARTED, "Session created, waiting for controller")
         return session
     }
     
@@ -59,7 +59,7 @@ class SessionRepository @Inject constructor() {
             role = DeviceRole.CONTROLLER
         )
         _currentSession.value = session
-        logActivity(ActivityType.SESSION_STARTED, "Attempting to connect to target device")
+        addActivityLog(ActivityType.SESSION_STARTED, "Attempting to connect to target device")
         return session
     }
     
@@ -75,7 +75,7 @@ class SessionRepository @Inject constructor() {
                 partnerId = partnerId,
                 connectedAt = System.currentTimeMillis()
             )
-            logActivity(ActivityType.CONNECTION_ESTABLISHED, "Connected to partner device")
+            addActivityLog(ActivityType.CONNECTION_ESTABLISHED, "Connected to partner device")
         }
     }
     
@@ -86,7 +86,7 @@ class SessionRepository @Inject constructor() {
         _currentSession.value?.let { session ->
             if (session.status == SessionStatus.CONNECTED) {
                 _currentSession.value = session.copy(status = SessionStatus.PAUSED)
-                logActivity(ActivityType.SESSION_PAUSED, "Session paused")
+                addActivityLog(ActivityType.SESSION_PAUSED, "Session paused")
             }
         }
     }
@@ -98,7 +98,7 @@ class SessionRepository @Inject constructor() {
         _currentSession.value?.let { session ->
             if (session.status == SessionStatus.PAUSED) {
                 _currentSession.value = session.copy(status = SessionStatus.CONNECTED)
-                logActivity(ActivityType.SESSION_RESUMED, "Session resumed")
+                addActivityLog(ActivityType.SESSION_RESUMED, "Session resumed")
             }
         }
     }
@@ -113,7 +113,7 @@ class SessionRepository @Inject constructor() {
                 status = SessionStatus.ENDED,
                 endedAt = System.currentTimeMillis()
             )
-            logActivity(ActivityType.SESSION_ENDED, "Session ended")
+            addActivityLog(ActivityType.SESSION_ENDED, "Session ended")
         }
     }
     
@@ -127,7 +127,7 @@ class SessionRepository @Inject constructor() {
                 status = SessionStatus.ENDED,
                 endedAt = System.currentTimeMillis()
             )
-            logActivity(ActivityType.EMERGENCY_STOP, "Emergency stop triggered")
+            addActivityLog(ActivityType.EMERGENCY_STOP, "Emergency stop triggered")
         }
     }
     
@@ -137,7 +137,7 @@ class SessionRepository @Inject constructor() {
     fun onConnectionLost() {
         _currentSession.value?.let { session ->
             _currentSession.value = session.copy(status = SessionStatus.ERROR)
-            logActivity(ActivityType.CONNECTION_LOST, "Connection to partner lost")
+            addActivityLog(ActivityType.CONNECTION_LOST, "Connection to partner lost")
         }
     }
     
@@ -152,7 +152,7 @@ class SessionRepository @Inject constructor() {
      * Logs a gesture received (for transparency).
      */
     fun logGestureReceived(gestureType: String) {
-        logActivity(ActivityType.GESTURE_RECEIVED, "Received $gestureType gesture")
+        addActivityLog(ActivityType.GESTURE_RECEIVED, "Received $gestureType gesture")
     }
     
     /**
@@ -160,7 +160,7 @@ class SessionRepository @Inject constructor() {
      */
     fun logPermissionEvent(granted: Boolean, permissionName: String) {
         val type = if (granted) ActivityType.PERMISSION_GRANTED else ActivityType.PERMISSION_DENIED
-        logActivity(type, "$permissionName permission ${if (granted) "granted" else "denied"}")
+        addActivityLog(type, "$permissionName permission ${if (granted) "granted" else "denied"}")
     }
     
     /**
@@ -170,7 +170,10 @@ class SessionRepository @Inject constructor() {
         _activityLog.value = emptyList()
     }
     
-    private fun logActivity(type: ActivityType, description: String) {
+    /**
+     * Adds an entry to the activity log.
+     */
+    fun addActivityLog(type: ActivityType, description: String) {
         val entry = ActivityLogEntry(
             id = UUID.randomUUID().toString(),
             timestamp = System.currentTimeMillis(),

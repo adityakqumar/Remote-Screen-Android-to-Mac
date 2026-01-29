@@ -45,6 +45,7 @@ class WebRTCClient @Inject constructor(
     private var videoSource: VideoSource? = null
     
     private var deviceRole: DeviceRole = DeviceRole.CONTROLLER
+    private var isInitialized = false
     
     private val _connectionState = MutableStateFlow(PeerConnectionState.NEW)
     val connectionState: StateFlow<PeerConnectionState> = _connectionState.asStateFlow()
@@ -60,28 +61,50 @@ class WebRTCClient @Inject constructor(
     }
     
     /**
-     * Initializes WebRTC and connects to the signaling server.
-     * 
-     * @param pairingCode The session pairing code
-     * @param role The role of this device (Controller or Target)
+     * Initializes WebRTC for the Target device.
+     * This uses the ALREADY CONNECTED signaling client.
+     * Call this when the target is ready to start streaming.
      */
-    suspend fun connect(pairingCode: String, role: DeviceRole) {
-        deviceRole = role
+    fun initializeAsTarget() {
+        if (isInitialized) {
+            Log.w(TAG, "Already initialized")
+            return
+        }
+        
+        deviceRole = DeviceRole.TARGET
+        isInitialized = true
+        
+        Log.i(TAG, "Initializing WebRTC as Target")
         
         initializePeerConnectionFactory()
         createPeerConnection()
-        
-        // Connect to signaling server
-        signalingClient.connect(pairingCode)
-        
-        // Set up signaling message handlers
+        createVideoTrack()
         setupSignalingHandlers()
         
-        // If target, create offer after connecting
-        if (role == DeviceRole.TARGET) {
-            createVideoTrack()
-            createAndSendOffer()
+        // Create and send offer immediately
+        createAndSendOffer()
+    }
+    
+    /**
+     * Initializes WebRTC for the Controller device.
+     * This uses the ALREADY CONNECTED signaling client.
+     */
+    fun initializeAsController() {
+        if (isInitialized) {
+            Log.w(TAG, "Already initialized")
+            return
         }
+        
+        deviceRole = DeviceRole.CONTROLLER
+        isInitialized = true
+        
+        Log.i(TAG, "Initializing WebRTC as Controller")
+        
+        initializePeerConnectionFactory()
+        createPeerConnection()
+        setupSignalingHandlers()
+        
+        // Controller waits for offer from Target
     }
     
     /**
@@ -218,18 +241,21 @@ class WebRTCClient @Inject constructor(
     private fun setupSignalingHandlers() {
         scope.launch {
             signalingClient.offerFlow.collect { sdp ->
+                Log.i(TAG, "Received offer via signaling")
                 handleRemoteOffer(sdp)
             }
         }
         
         scope.launch {
             signalingClient.answerFlow.collect { sdp ->
+                Log.i(TAG, "Received answer via signaling")
                 handleRemoteAnswer(sdp)
             }
         }
         
         scope.launch {
             signalingClient.iceCandidateFlow.collect { candidate ->
+                Log.i(TAG, "Received ICE candidate via signaling")
                 handleRemoteIceCandidate(candidate)
             }
         }
@@ -238,18 +264,22 @@ class WebRTCClient @Inject constructor(
     /**
      * Creates and sends an SDP offer (Target device only).
      */
-    private fun createAndSendOffer() {
+    fun createAndSendOffer() {
+        Log.i(TAG, "Creating and sending offer...")
+        
         val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
         }
         
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(sdp: SessionDescription?) {
                 sdp?.let {
+                    Log.i(TAG, "Offer created, setting local description...")
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
+                            Log.i(TAG, "Local description set, sending offer...")
                             scope.launch {
                                 signalingClient.sendOffer(it)
                             }
@@ -276,9 +306,11 @@ class WebRTCClient @Inject constructor(
      * Handles a remote SDP offer (Controller device only).
      */
     private fun handleRemoteOffer(sdp: SessionDescription) {
+        Log.i(TAG, "Handling remote offer...")
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
+                Log.i(TAG, "Remote offer set, creating answer...")
                 createAndSendAnswer()
             }
             override fun onCreateFailure(error: String?) {
@@ -294,6 +326,7 @@ class WebRTCClient @Inject constructor(
      * Creates and sends an SDP answer (Controller device only).
      */
     private fun createAndSendAnswer() {
+        Log.i(TAG, "Creating and sending answer...")
         val constraints = MediaConstraints()
         
         peerConnection?.createAnswer(object : SdpObserver {
@@ -302,6 +335,7 @@ class WebRTCClient @Inject constructor(
                     peerConnection?.setLocalDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
+                            Log.i(TAG, "Local answer set, sending answer...")
                             scope.launch {
                                 signalingClient.sendAnswer(it)
                             }
@@ -328,10 +362,11 @@ class WebRTCClient @Inject constructor(
      * Handles a remote SDP answer (Target device only).
      */
     private fun handleRemoteAnswer(sdp: SessionDescription) {
+        Log.i(TAG, "Handling remote answer...")
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
-                Log.i(TAG, "Remote answer set successfully")
+                Log.i(TAG, "Remote answer set successfully - connection should be established!")
             }
             override fun onCreateFailure(error: String?) {
                 Log.e(TAG, "Failed to set remote answer: $error")
@@ -346,6 +381,7 @@ class WebRTCClient @Inject constructor(
      * Handles a remote ICE candidate.
      */
     private fun handleRemoteIceCandidate(candidate: IceCandidate) {
+        Log.d(TAG, "Adding remote ICE candidate")
         peerConnection?.addIceCandidate(candidate)
     }
     
@@ -360,6 +396,8 @@ class WebRTCClient @Inject constructor(
      * Disconnects and releases all resources.
      */
     fun disconnect() {
+        isInitialized = false
+        
         screenCapturer?.dispose()
         screenCapturer = null
         
@@ -375,12 +413,8 @@ class WebRTCClient @Inject constructor(
         peerConnectionFactory?.dispose()
         peerConnectionFactory = null
         
-        signalingClient.disconnect()
-        
         _connectionState.value = PeerConnectionState.CLOSED
         _remoteVideoTrack.value = null
-        
-        scope.cancel()
         
         Log.i(TAG, "Disconnected and released resources")
     }
