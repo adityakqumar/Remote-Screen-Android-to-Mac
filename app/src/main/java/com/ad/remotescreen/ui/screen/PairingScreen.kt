@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ad.remotescreen.MainActivity
 import com.ad.remotescreen.data.PairingCodeGenerator
 import com.ad.remotescreen.ui.viewmodel.PairingViewModel
 import com.google.zxing.BarcodeFormat
@@ -92,10 +93,12 @@ fun PairingScreen(
         }
     }
     
-    // Initialize as target if not controller
+    // Initialize as target if not controller - also request screen capture permission
     LaunchedEffect(isController) {
         if (!isController) {
             viewModel.initializeAsTarget()
+            // Request screen capture permission for Target mode
+            MainActivity.requestScreenCapture()
         }
     }
 }
